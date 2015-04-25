@@ -1,0 +1,14 @@
+{
+
+  "network": "<irc server here>",
+  "name": "<bot name here>",
+
+  "options": {
+    "realName": "Jib (https://github.com/yanickrochon/jib.git)",
+    "debug": true,
+    "autoConnect": true,
+    "floodProtection": true,
+    "floodProtectionDelay": 1000
+  }
+
+}
