@@ -1,4 +1,6 @@
 
+const OP_MODE_PATTERN = /\+[^\-]*o/;
+
 var channels = require('../lib/channels');
 
 
@@ -17,37 +19,44 @@ Auto-OP the users configured in each channels
 @param client    the IRC client interface
 @param channels  operators config for each channels
 */
-function operators(client, channels) {
+function operators(client, channelsOps) {
 
-  Object.keys(channels).forEach(function (channelName) {
-    var ops = channels[channelName] || [];
+  client.addListener('join', function (channel, nick, message) {
+    channelsOps[channel] && isSelfChanOp(client, channel) && makeOp(client, channel, channelsOps[channel], nick);
+  });
 
-    if (Array.isArray(ops)) {
-      bindEvents(client, channelName, ops);
-    } else {
-      util.log('\u001b[01;31mERR: Operators config is not an array for channel ' + channelName + '; ' + util.inspect(ops) + '\u001b[0m');
-    }
+  client.addListener('nick', function (oldnick, newnick, channels, message) {
+    channels.forEach(function (channel) {
+      channelsOps[channel] && isSelfChanOp(client, channel) && makeOp(client, channelsOps[channel], newnick);
+    });
   });
 
 }
 
 
+/**
+Make sure that we are a channel operator in the given channel
+@param client  the irc client interace
+@param channel  the channel we want to check
+@return boolean
+*/
+function isSelfChanOp(client, channel) {
+  var chanInfo = client.chans[channel];
+
+  return chanInfo && OP_MODE_PATTERN.test(chanInfo.mode);
+}
+
+
 
 /**
-Bind all events for the specified channel
-
-@param client       the IRC client interface
-@param channelName  the channel name to bind to
-@param ops          an array of user operators
+Attempt to make a channel op if the given nick is a known operator
 */
-function bindEvents(client, channelName, ops) {
-
-  client.addListener('join' + channelName, function (from) {
-    if (ops.indexOf(from) >= 0) {
-      client.send('MODE', channelName, '+o', from);
+function makeOp(client, channel, operators, nick) {
+  if (Array.isArray(operators)) {
+    if (operators.indexOf(nick) >= 0) {
+      client.send('MODE', channel, '+o', nick);
     }
-  });
-
-  // TODO : event on nick change, too
-
+  } else {
+    util.log('\u001b[01;31mERR: Operators config is not an array for channel ' + channel + '; ' + util.inspect(operators) + '\u001b[0m');
+  }
 }
