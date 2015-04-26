@@ -43,7 +43,12 @@ Make sure that we are a channel operator in the given channel
 function isSelfChanOp(client, channel) {
   var chanInfo = client.chans[channel];
 
-  return chanInfo && OP_MODE_PATTERN.test(chanInfo.mode);
+  //console.log("*** TEST OP for", channel, chanInfo && chanInfo.mode, chanInfo && OP_MODE_PATTERN.test(chanInfo.mode));
+
+  // TODO : the channel information is not being updated if the bot receives or loses operator privileges...
+  //        Just assume that we are OP... whetever for now
+
+  return true; // chanInfo && OP_MODE_PATTERN.test(chanInfo.mode);
 }
 
 

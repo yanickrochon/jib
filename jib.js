@@ -1,6 +1,6 @@
 
-var CONF_PATH = __dirname + '/conf';
-var PLUGINS_PATH = __dirname + '/plugins';
+var CONF_PATH = 'conf';
+var PLUGINS_PATH = 'plugins';
 
 
 var config = require('./lib/config');
@@ -11,16 +11,19 @@ var util = require('util');
 var irc = require('irc');
 
 
+config.setBasePath(CONF_PATH);
+plugins.setBasePath(PLUGINS_PATH);
+
 
 Promise.all([
-  config.loadJson(CONF_PATH + '/client.json'),
-  plugins.load(PLUGINS_PATH),
+  config.loadJson('client.json'),
+  plugins.load(),
 ]).then(function (results) {
   var config = results[0];
   var plugins = results[1];
   var client;
 
-  channels.loadConfig(CONF_PATH).then(function (channels) {
+  channels.loadConfig().then(function (channels) {
 
     // set channels to join
     config.options.channels = Object.keys(channels);
@@ -45,7 +48,7 @@ Promise.all([
   });
 
 }).catch(function (err) {
-  console.error("Error initializing application", err.stack);
+  util.log('\u001b[01;31mError initializing application: ' + util.inspect(err) + '\u001b[0m');
 });
 
 
