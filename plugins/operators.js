@@ -1,6 +1,8 @@
 
 const OP_MODE_PATTERN = /\+[^\-]*o/;
 
+var util = require('util');
+
 var channels = require('../lib/channels');
 
 
