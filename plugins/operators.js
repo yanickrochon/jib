@@ -63,9 +63,7 @@ Make sure that we are a channel operator in the given channel
 @return boolean
 */
 function isSelfChanOp(client, channel) {
-  var selfNick = client.name;
-
-  return isChanOp(client, channel, null, selfNick);
+  return isChanOp(client, channel, null, client.opt.nick);
 }
 
 
