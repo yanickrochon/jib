@@ -16,7 +16,7 @@ plugins.setBasePath(PLUGINS_PATH);
 
 
 Promise.all([
-  config.loadJson('client.json'),
+  config.loadJson('client'),
   plugins.load(),
 ]).then(function (results) {
   var config = results[0];
@@ -50,21 +50,3 @@ Promise.all([
 }).catch(function (err) {
   util.log('\u001b[01;31mError initializing application: ' + util.inspect(err) + '\u001b[0m');
 });
-
-
-
-
-/*
-
-client.addListener('message' + CHANNEL, function (from, message) {
-  util.log('MSG: ' + from + ' => ' + CHANNEL + ': ' + message);
-
-  if (cannedMessages[message]) {
-    client.say(CHANNEL, from + ', ' + cannedMessages[message]);
-  } else if (message.startsWith('!help')) {
-    client.notice(from, 'Who do you think I am, your mother?');
-  }
-
-});
-
-*/
