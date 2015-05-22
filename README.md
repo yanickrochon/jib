@@ -45,16 +45,20 @@ Plugins are the parts that handles requests in channels. To add a plugin to any 
 
 ### Operators
 
-The operators plugin will auto-op all users defined in it's configuration. TO use the plugin in a channel, create a `operstors.json` inside the channel configuration folder and declare an array of users to give `+o` mode to.
+The operators plugin will auto-op all users defined in it's configuration. To use the plugin in a channel, create a `operstors.json` inside the channel configuration folder and declare a list of users to give `+o` mode to.
 
 #### Exemple
 
 ```
-[
-  "bob",
-  "_mistercat"
-]
+{
+    "users": {
+        "bob": null
+        "_mistercat": null
+    }
+}
 ```
+
+(**Note**: the value of each users will be updated with the last known WHOIS information automatically. Set to `null` initially.)
 
 
 ## License

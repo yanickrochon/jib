@@ -29,30 +29,41 @@ Auto-OP the users configured in each channels
 @param client    the IRC client interface
 @param channels  operators config for each channels
 */
-function operators(client, channelsOps) {
+function operators(client, config) {
 
   client.addListener('join', function (channel, nick, message) {
-    isSelfChanOp(client, channel) && makeOp(client, channel, channelsOps[channel], nick);
+    isPluginEnabled(channel, config) && isSelfChanOp(client, channel) && makeOp(client, channel, config[channel].users, nick);
   });
 
   client.addListener('nick', function (oldnick, newnick, channels, message) {
     channels.forEach(function (channel) {
-      isSelfChanOp(client, channel) && makeOp(client, channel, channelsOps[channel], newnick);
+      isPluginEnabled(channel, config) && isSelfChanOp(client, channel) && makeOp(client, channel, config[channel].users, newnick);
     });
   });
 
   client.addListener('pm', function (from, message) {
     var match = message.match(CMD_PATTERN);
 
-    if (!(Object.keys(channelsOps).some(function (channel) {
-      return isChanOp(client, channel, channelsOps[channel], from);
+    if (!(Object.keys(config).some(function (channel) {
+      return isChanOp(client, channel, from) || (isPluginEnabled(channel, config) && isKnownOp(client, channel, config[channel].users, from));
     }))) {
       client.say(from, 'Who the heck are you? Stop bothering me!');
-    } else if (!(match && processCmd(client, channelsOps, from, match[1].toLowerCase(), match[2] || ''))) {
+    } else if (!(match && processCmd(client, config, from, match[1].toLowerCase(), match[2] || ''))) {
       client.say(from, 'What? If you want "help", just ask!');
     }
   });
 
+}
+
+
+/**
+Check if this plugin is enabled (has configuration) for the given channel
+@param channel the channel
+@param config the plugin config
+@return boolean
+*/
+function isPluginEnabled(channel, config) {
+  return config && config[channel];
 }
 
 
@@ -63,26 +74,45 @@ Make sure that we are a channel operator in the given channel
 @return boolean
 */
 function isSelfChanOp(client, channel) {
-  return isChanOp(client, channel, null, client.opt.nick);
+  return isChanOp(client, channel, client.opt.nick);
 }
 
 
 /**
-Check if the given nick is a channel operator, or known channel operator in the
-given channel and list of known operators
+Check if we know this nick as an operator
+
+@param client     the irc client interface
+@param channel    the channel to check
+@param operators  a list of operators to check from
+@param nick       the nick to validate
+*/
+function isKnownOp(client, channel, operators, nick) {
+  var isKnown = false;
+
+  // TODO : add extra validation with WHOIS information to minimize impersonation
+  //        the config should be an object instead of an array. The object should
+  //        contain the last WHOIS information
+
+  if (operators && Array.isArray(operators)) {
+    isKnown = operators.indexOf(nick) >= 0;
+  } else {
+    util.log('\u001b[01;31mERR: Operators config is not an array for channel ' + channel + '; ' + util.inspect(operators) + '\u001b[0m');
+  }
+
+  return isKnown;
+}
+
+
+/**
+Check if the given nick is a channel operator
 @param client     the irc client interface
 @param channel    the channel we want to check
-@param operators  the list of known operators for the given channel
 @param nick       the nick to check
 @return boolean   true if nick is an known operator
 */
-function isChanOp(client, channel, operators, nick) {
+function isChanOp(client, channel, nick) {
   //var chanInfo = client.chans[channel];
   var isOp = false;
-
-  if (operators && Array.isArray(operators)) {
-    isOp = operators.indexOf(nick) >= 0;
-  }
 
   if (!isOp && client.chans[channel]) {
     isOp = (client.chans[channel].users[nick] || '').indexOf(OP_MODE) >= 0;
@@ -104,6 +134,19 @@ function isChanOp(client, channel, operators, nick) {
 
 
 /**
+Return the WHOIS information for the given nick. First, try to see if
+was have this information cached in the client, or fetch the information
+from the server
+@param client the client interface
+@param nick  the nick to fetch WHOIS
+@return Object|null
+*/
+function getWhois(client, nick) {
+  return Promise.resolve(null);
+}
+
+
+/**
 Attempt to make a channel op if the given nick is a known operator
 @param client     the irc client interface
 @param channel    the channel we want to check
@@ -114,20 +157,19 @@ Attempt to make a channel op if the given nick is a known operator
 function makeOp(client, channel, operators, nick) {
   var result = false;
 
-  if (operators && Array.isArray(operators)) {
-    if (operators.indexOf(nick) >= 0) {
+  if (isKnownOp(client, channel, operators, nick)) {
+    // do not OP twice
+    if (!isChanOp(client, channel, operators, nick)) {
       client.send('MODE', channel, '+o', nick);
-      result = true;
     }
-  } else {
-    util.log('\u001b[01;31mERR: Operators config is not an array for channel ' + channel + '; ' + util.inspect(operators) + '\u001b[0m');
+    result = true;
   }
 
   return result;
 }
 
 
-function processCmd(client, channelsOps, from, cmd, args) {
+function processCmd(client, config, from, cmd, args) {
   var valid = false;
 
   if (cmd === 'help') {
@@ -136,18 +178,18 @@ function processCmd(client, channelsOps, from, cmd, args) {
     client.say(from, 'LISTOPS <channel>            List all registered operators in the given channel.')
     valid = true;
   } else if (cmd === 'addop') {
-    valid = addOperator(client, channelsOps, from, argsUtil.split(args || '', ['nick']));
+    valid = addOperator(client, config, from, argsUtil.split(args || '', ['nick']));
   } else if (cmd === 'remop') {
-    valid = removeOperator(client, channelsOps, from, argsUtil.split(args || '', ['nick']));
+    valid = removeOperator(client, config, from, argsUtil.split(args || '', ['nick']));
   } else if (cmd === 'listops') {
-    valid = listOperators(client, channelsOps, from, argsUtil.split(args || '', ['channel']));
+    valid = listOperators(client, config, from, argsUtil.split(args || '', ['channel']));
   }
 
   return valid;
 }
 
 
-function addOperator(client, channelsOps, from, options) {
+function addOperator(client, config, from, options) {
   var nick = options.nick || '';
   var channels = (options['?'] || '').split(WHITESPACE_PATTERN).filter(function (channel) {
     return channel.length;
@@ -159,29 +201,46 @@ function addOperator(client, channelsOps, from, options) {
   } else if (!channels.length) {
     client.say(from, "You must tell me on which channels to add " + nick + "!");
   } else {
-    channels.forEach(function (channel) {
-      if (channel in channelsOps) {
-        util.log('Adding operator ' + nick + ' to ' + channel + ' by ' + from);
-        channelsOps[channel].push(nick);
-        updatedChannels.push(channel);
+    getWhois(client, nick).then(function (whois) {
+      channels.forEach(function (channel) {
+        if (channel in config) {
+          util.log('Adding operator ' + nick + ' to ' + channel + ' by ' + from);
 
-        client.say(nick, 'You have been added OP status in ' + channel + ' by ' + from);
+          if (!config[channel]) {
+            // handling new channel
+            config[channel] = {
+              users: {}
+            };
+          }
 
-        config.saveJson(path.join(channel, CONFIG_NAME), channelsOps[channel]).then(function () {
-          util.log('Channel operators saved for ' + channel);
-        }).catch(function (e) {
-          util.log('\u001b[01;31mERR: Could not save operator for channel ' + channel + '; ' + util.inspect(channelsOps[channel]) + '\u001b[0m');
-        });
-      }
+          if (!(nick in config[channel].users)) {
+
+            // TODO : if in channel, set OP to nick
+
+            config[channel].users[nick] = whois;
+            client.say(nick, 'You have been added OP status in ' + channel + ' by ' + from);
+
+            updatedChannels.push(channel);
+
+            // TODO : make sure channel config dir exists
+
+            config.saveJson(path.join(channel, CONFIG_NAME), config[channel]).then(function () {
+              util.log('Channel operators saved for ' + channel);
+            }).catch(function (e) {
+              util.log('\u001b[01;31mERR: Could not save operator for channel ' + channel + '; ' + util.inspect(config[channel]) + '\u001b[0m');
+            });
+          }
+        }
+      });
+
+      client.say(from, "The user " + nick + " has been successfully added to the operators list in " + updatedChannels.join(', ') + ", and has been notified if currently online");
     });
-
-    client.say(from, "The user " + nick + " has been added to the operators list successfully (i.e " + updatedChannels.join(', ') + ") and has been notified if currently online");
   }
 
   return true;
 }
 
-function removeOperator(client, channelsOps, from, options) {
+function removeOperator(client, config, from, options) {
   var nick = options.nick || '';
   var channels = (options['?'] || '').split(WHITESPACE_PATTERN).filter(function (channel) {
     return channel.length;
@@ -189,50 +248,69 @@ function removeOperator(client, channelsOps, from, options) {
   var updatedChannels = [];
 
   if (!channels.length) {
-    channels = Object.keys(channelsOps);
+    channels = Object.keys(config);
   }
 
   if (!nick.length) {
     client.say(from, "You're missing the nickname!");
   } else {
-    channels.forEach(function (channel) {
-      var nickIndex = channel in channelsOps ? channelsOps[channel].indexOf(nick) : -1;
+    getWhois(client, nick).then(function (whois) {
+      channels.forEach(function (channel) {
+        var nickIsOp = (channel in config) && (config[channel].users) && (nick in config[channel].users);
 
-      if (nickIndex >= 0) {
-        util.log('Removing operator ' + nick + ' from ' + channel + ' by ' + from);
-        channelsOps[channel].splice(nickIndex, 1);
-        updatedChannels.push(channel);
+        if (nickIsOp >= 0) {
+          util.log('Removing operator ' + nick + ' from ' + channel + ' by ' + from);
+          delete config[channel].users[nick];
 
-        client.say(nick, 'You have been revoked OP status in ' + channel + ' by ' + from);
+          updatedChannels.push(channel);
 
-        config.saveJson(path.join(channel, CONFIG_NAME), channelsOps[channel]).then(function () {
-          util.log('Channel operators saved for ' + channel);
-        }).catch(function (e) {
-          util.log('\u001b[01;31mERR: Could not save operator for channel ' + channel + '; ' + util.inspect(channelsOps[channel]) + '\u001b[0m');
-        });
-      }
+          client.say(nick, 'You have been revoked OP status in ' + channel + ' by ' + from);
+
+          // TODO : if in channel, take OP from nick
+
+          // TODO : make sure channel config dir exists
+
+          config.saveJson(path.join(channel, CONFIG_NAME), config[channel]).then(function () {
+            util.log('Channel operators saved for ' + channel);
+          }).catch(function (e) {
+            util.log('\u001b[01;31mERR: Could not save operator for channel ' + channel + '; ' + util.inspect(config[channel]) + '\u001b[0m');
+          });
+        }
+      });
+
+      client.say(from, "The user " + nick + " has been successfully removed from the operators list in " + updatedChannels.join(', ') + ", and has been notified if currently online");
     });
-
-    client.say(from, "The user " + nick + " has been removed from the operators list successfully (i.e " + updatedChannels.join(', ') + ") and has been notified if currently online");
   }
 
   return true;
 }
 
-function listOperators(client, channelsOps, from, options) {
+function listOperators(client, config, from, options) {
   var channel = options.channel || '';
 
   if (!channel.length) {
     client.say(from, "You're missing the channel!");
-  } else if (!(channel in channelsOps)) {
-    client.say(from, "I don't know this channel.");
+  } else if (!(channel in config)) {
+    client.say(from, "I do not handle this channel.");
   } else {
-    util.log('Listing all operators in ' + channel + ' to ' + from);
-    client.say(from, "There are currently " + channelsOps[channel].length + " users registered in " + channel +
-      (channelsOps[channel].length > 0
-      ? ' : ' + channelsOps[channel].join(', ')
-      : '')
-    );
+    getWhois(client, nick).then(function (whois) {
+      var operators = Object.keys(config[channel].users || {});
+
+      util.log('Listing all operators in ' + channel + ' to ' + from);
+
+      if (operators.length) {
+        client.say(from, "There are currently " + operators.length + " users registered has operator in " + channel +
+          ' : ' + operators.map(function (op) {
+
+            // TODO : add some WHOIS info, if available
+
+            return op;
+          }).join(', ')
+        );
+      } else {
+        client.say(from, "There are currently no users registered has operator in " + channel);
+      }
+    });
   }
 
   return true;
