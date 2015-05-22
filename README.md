@@ -5,6 +5,8 @@ JavaScript IRC Bot
 
 ## Installation
 
+To run this application, you will need the latest [io.js](https://iojs.org/en/index.html) engine. Currently, it will not run with Node.js. It is recommended to install io.js using [nvm](https://github.com/creationix/nvm).
+
 ```
 $ git clone https://github.com/yanickrochon/jib.git
 ```
