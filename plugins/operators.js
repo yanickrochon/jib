@@ -93,10 +93,10 @@ function isKnownOp(client, channel, operators, nick) {
   //        the config should be an object instead of an array. The object should
   //        contain the last WHOIS information
 
-  if (operators && Array.isArray(operators)) {
-    isKnown = operators.indexOf(nick) >= 0;
+  if (operators !== null && typeof operators === 'object') {
+    isKnown = nick in operators;
   } else {
-    util.log('\u001b[01;31mERR: Operators config is not an array for channel ' + channel + '; ' + util.inspect(operators) + '\u001b[0m');
+    util.log('\u001b[01;31mERR: Operators config is not valid for channel ' + channel + '; ' + util.inspect(operators) + '\u001b[0m');
   }
 
   return isKnown;
@@ -293,24 +293,32 @@ function listOperators(client, config, from, options) {
   } else if (!(channel in config)) {
     client.say(from, "I do not handle this channel.");
   } else {
-    getWhois(client, nick).then(function (whois) {
-      var operators = Object.keys(config[channel].users || {});
+    var operators = Object.keys(config[channel].users || {});
 
-      util.log('Listing all operators in ' + channel + ' to ' + from);
+    util.log('Listing all operators in ' + channel + ' to ' + from);
 
-      if (operators.length) {
+    if (operators.length) {
+      Promise.all(operators.map(function (nick) {
+        return getWhois(client, nick);
+      })).then(function () {
+        var whoisList = arguments;
+
         client.say(from, "There are currently " + operators.length + " users registered has operator in " + channel +
-          ' : ' + operators.map(function (op) {
+          ' : ' + operators.map(function (op, index) {
+            var whois = whoisList[index];
 
             // TODO : add some WHOIS info, if available
 
             return op;
           }).join(', ')
         );
-      } else {
-        client.say(from, "There are currently no users registered has operator in " + channel);
-      }
-    });
+      }).catch(function (e) {
+        util.log('\u001b[01;31mERR: Failed to get WHOIS information: ' + util.inspect(e) + '\u001b[0m');
+        client.say(from, 'Sorry, there was a problem listing OPs for ' + channel);
+      });
+    } else {
+      client.say(from, "There are currently no users registered has operator in " + channel);
+    }
   }
 
   return true;
